@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
 
 type ScoreResult = "birdie" | "par" | "bogey+";
-type GameMode = "elimination" | "siege"; // Option B, Option E
-
+type GameMode = "elimination" | "siege"; // Option A, Option B
 type Player = {
   id: number;
   name: string;
@@ -400,16 +399,14 @@ const App: React.FC = () => {
           <section className="bg-slate-800/70 rounded-xl p-5 border border-slate-700">
             <div className="flex flex-col md:flex-row md:items-baseline md:justify-between gap-2">
               <h2 className="text-xl font-bold">Final Results</h2>
-              <div className="text-sm text-slate-300">
-                Mode:{" "}
-                <span className="font-semibold">
-                  {mode === "elimination"
-                    ? "Option B — Elimination"
-                    : "Option E — Siege"}
-                </span>
-              </div>
-            </div>
-
+<div className="text-sm text-slate-300">
+  Mode:{" "}
+  <span className="font-semibold">
+    {mode === "elimination"
+      ? "Option A — Elimination"
+      : "Option B — Siege"}
+  </span>
+</div>
             <div className="mt-3 text-sm">
               <div className="text-emerald-300">
                 Winner{winnerInfo.ties.length > 1 ? "s" : ""}:{" "}
@@ -418,7 +415,7 @@ const App: React.FC = () => {
                 </span>
               </div>
               <div className="text-slate-400 text-xs mt-1">
-                Winner = most health remaining; tiebreaker = fewer forts destroyed.
+                Winner = most fort health remaining; tiebreaker = fewer forts destroyed.
               </div>
             </div>
 
