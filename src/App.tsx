@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-
+import fortGolfLogo from "./assets/fort-golf-logo.png";
 type ScoreResult = "birdie" | "par" | "bogey+";
 type GameMode = "elimination" | "siege"; // Option A, Option B
 type Player = {
@@ -276,12 +276,7 @@ const App: React.FC = () => {
         <header className="space-y-3">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="flex items-center gap-4">
-              <img
-                src="/fort-golf-logo.png"
-                alt="Fort Golf logo"
-                className="h-14 w-auto"
-              />
-              <div>
+<img src={fortGolfLogo} alt="Fort Golf logo" className="h-14 w-auto" />              <div>
                 <h1 className="text-3xl font-bold leading-tight">Fort Golf</h1>
                 <p className="text-slate-400 text-sm">
                   Tactical fort battle scoring for golf
