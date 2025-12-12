@@ -305,14 +305,13 @@ const App: React.FC = () => {
                 Game Mode
               </label>
               <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value as GameMode)}
-                className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="elimination">Option B — Elimination</option>
-                <option value="siege">Option E — Siege (Forts Destroyed tally)</option>
-              </select>
-              <p className="text-[11px] text-slate-500">
+  value={mode}
+  onChange={(e) => setMode(e.target.value as GameMode)}
+  className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+>
+  <option value="elimination">Option A — Elimination</option>
+  <option value="siege">Option B — Siege (Forts Destroyed tally)</option>
+</select>              <p className="text-[11px] text-slate-500">
                 Switching modes doesn’t auto-reset — hit{" "}
                 <span className="font-semibold">Reset Game</span>.
               </p>
