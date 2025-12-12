@@ -10,7 +10,7 @@ type Player = {
   maxLayers: number;
   colorClass: string;
 
-  eliminated: boolean; // only used in elimination mode
+  eliminated: boolean; // Option B
   fortsDestroyed: number; // increments when health drops from >0 to 0
 };
 
@@ -39,7 +39,6 @@ const PLAYER_COLORS = [
 ];
 
 const DEFAULT_NAMES = ["Player A", "Player B", "Player C", "Player D"];
-
 const DAMAGE_CAP_OPTIONS = [5, 10, 15, 20, 25];
 
 function attackerScore(score: ScoreResult) {
@@ -67,9 +66,18 @@ function defenderScore(score: ScoreResult) {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-function formatSigned(n: number) {
-  if (n > 0) return `+${n}`;
-  return `${n}`;
+const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+
+function makePlayers(numPlayers: number, startingLayers: number): Player[] {
+  return Array.from({ length: numPlayers }, (_, i) => ({
+    id: i,
+    name: DEFAULT_NAMES[i] ?? `Player ${i + 1}`,
+    fortLayers: startingLayers,
+    maxLayers: startingLayers,
+    colorClass: PLAYER_COLORS[i] ?? PLAYER_COLORS[0],
+    eliminated: false,
+    fortsDestroyed: 0,
+  }));
 }
 
 const App: React.FC = () => {
@@ -82,78 +90,39 @@ const App: React.FC = () => {
   const [defenderIndex, setDefenderIndex] = useState<number>(0);
 
   const [players, setPlayers] = useState<Player[]>(
-    Array.from({ length: 4 }, (_, i) => ({
-      id: i,
-      name: DEFAULT_NAMES[i],
-      fortLayers: startingLayers,
-      maxLayers: startingLayers,
-      colorClass: PLAYER_COLORS[i],
-      eliminated: false,
-      fortsDestroyed: 0,
-    }))
+    makePlayers(4, startingLayers)
   );
 
   const [holeInputs, setHoleInputs] = useState<Record<number, HoleInput>>({});
   const [lastSummary, setLastSummary] = useState<HoleSummary | null>(null);
   const [history, setHistory] = useState<HoleSummary[]>([]);
 
-  const activePlayers = useMemo(() => {
-    if (mode === "elimination") return players.filter((p) => !p.eliminated);
-    return players;
+  const activePlayersCount = useMemo(() => {
+    if (mode === "elimination") return players.filter((p) => !p.eliminated).length;
+    return players.length;
   }, [players, mode]);
 
   const gameOver =
     currentHole > totalHoles ||
-    (mode === "elimination" && activePlayers.length <= 1);
+    (mode === "elimination" && activePlayersCount <= 1);
 
-  const defender = useMemo(() => players[defenderIndex], [players, defenderIndex]);
+  const defender = players[defenderIndex];
 
   const resetGame = () => {
     setCurrentHole(1);
     setDefenderIndex(0);
-    setPlayers(
-      Array.from({ length: numPlayers }, (_, i) => ({
-        id: i,
-        name: DEFAULT_NAMES[i] || `Player ${i + 1}`,
-        fortLayers: startingLayers,
-        maxLayers: startingLayers,
-        colorClass: PLAYER_COLORS[i],
-        eliminated: false,
-        fortsDestroyed: 0,
-      }))
-    );
+    setPlayers(makePlayers(numPlayers, startingLayers));
     setHoleInputs({});
     setLastSummary(null);
     setHistory([]);
   };
 
   const handleNumPlayersChange = (value: number) => {
-    const clampedPlayers = Math.min(4, Math.max(2, value));
-    setNumPlayers(clampedPlayers);
-    setPlayers((prev) => {
-      const next: Player[] = [];
-      for (let i = 0; i < clampedPlayers; i++) {
-        const existing = prev[i];
-        next.push(
-          existing || {
-            id: i,
-            name: DEFAULT_NAMES[i] || `Player ${i + 1}`,
-            fortLayers: startingLayers,
-            maxLayers: startingLayers,
-            colorClass: PLAYER_COLORS[i],
-            eliminated: false,
-            fortsDestroyed: 0,
-          }
-        );
-      }
-      return next.map((p, idx) => ({
-        ...p,
-        id: idx,
-        colorClass: PLAYER_COLORS[idx],
-      }));
-    });
+    const nextN = Math.min(4, Math.max(2, value));
+    setNumPlayers(nextN);
     setCurrentHole(1);
     setDefenderIndex(0);
+    setPlayers(makePlayers(nextN, startingLayers));
     setHoleInputs({});
     setLastSummary(null);
     setHistory([]);
@@ -175,57 +144,34 @@ const App: React.FC = () => {
     }));
   };
 
-  const nextDefenderIndex = (startIndex: number, nextPlayers: Player[]) => {
+  const getNextDefenderIndex = (startIndex: number, updatedPlayers: Player[]) => {
+    const n = updatedPlayers.length;
+
     if (mode !== "elimination") {
-      return (startIndex + 1) % nextPlayers.length;
+      return (startIndex + 1) % n;
     }
 
-    // elimination: skip eliminated players
-    const n = nextPlayers.length;
+    // elimination: find next non-eliminated player
     for (let step = 1; step <= n; step++) {
       const idx = (startIndex + step) % n;
-      if (!nextPlayers[idx].eliminated) return idx;
+      if (!updatedPlayers[idx].eliminated) return idx;
     }
-    // fallback (shouldn't happen)
     return startIndex;
-  };
-
-  const computeWinner = (finalPlayers: Player[]) => {
-    const pool = mode === "elimination"
-      ? finalPlayers.filter((p) => !p.eliminated)
-      : finalPlayers;
-
-    if (pool.length === 0) return null;
-
-    // Winner = most health remaining; tiebreaker = fewer fortsDestroyed; then name
-    const sorted = [...pool].sort((a, b) => {
-      if (b.fortLayers !== a.fortLayers) return b.fortLayers - a.fortLayers;
-      if (a.fortsDestroyed !== b.fortsDestroyed) return a.fortsDestroyed - b.fortsDestroyed;
-      return a.name.localeCompare(b.name);
-    });
-
-    const best = sorted[0];
-    const tied = sorted.filter(
-      (p) =>
-        p.fortLayers === best.fortLayers &&
-        p.fortsDestroyed === best.fortsDestroyed
-    );
-
-    return { winner: best, ties: tied, sorted };
   };
 
   const applyHoleResults = () => {
     if (gameOver) return;
     if (!defender) return;
 
-    // If elimination mode and defender eliminated (shouldn't happen), skip
+    // If elimination mode and defender is eliminated (shouldn't happen), skip
     if (mode === "elimination" && defender.eliminated) {
-      setDefenderIndex((idx) => nextDefenderIndex(idx, players));
+      setDefenderIndex((idx) => getNextDefenderIndex(idx, players));
       setCurrentHole((h) => h + 1);
       setHoleInputs({});
       return;
     }
 
+    // attackers = everyone except defender; skip eliminated attackers in elimination mode
     const attackerIds = players
       .filter((_, idx) => idx !== defenderIndex)
       .filter((p) => (mode === "elimination" ? !p.eliminated : true))
@@ -237,11 +183,9 @@ const App: React.FC = () => {
       const input = holeInputs[id];
       if (!input) return;
 
-      const fairway = input.fairway ? -1 : 0;
-      const gir = input.gir ? -1 : 0;
-      const score = attackerScore(input.score);
-
-      attackerDamageTotal += fairway + gir + score;
+      attackerDamageTotal += (input.fairway ? -1 : 0);
+      attackerDamageTotal += (input.gir ? -1 : 0);
+      attackerDamageTotal += attackerScore(input.score);
     });
 
     const defenderInput = holeInputs[defender.id];
@@ -251,8 +195,7 @@ const App: React.FC = () => {
     let net = attackerDamageTotal + defenderRepair;
 
     const attackersDidNothing = attackerDamageTotal === 0;
-    const defenderBogeyOrWorse =
-      !defenderInput || defenderInput.score === "bogey+";
+    const defenderBogeyOrWorse = !defenderInput || defenderInput.score === "bogey+";
 
     // Special rule: zero net damage & attackers did nothing & defender bogey+ => defender repairs +1
     if (net === 0 && attackersDidNothing && defenderBogeyOrWorse) {
@@ -261,13 +204,9 @@ const App: React.FC = () => {
 
     const oldHealth = defender.fortLayers;
     const maxHealth = defender.maxLayers;
-
-    // Elimination mode: if you hit 0, you're out and cannot be repaired later (since you won't defend again)
-    let newHealth = clamp(oldHealth + net, 0, maxHealth);
-
+    const newHealth = clamp(oldHealth + net, 0, maxHealth);
     const destroyedThisHole = oldHealth > 0 && newHealth === 0;
 
-    // Build summary using the computed newHealth
     const summary: HoleSummary = {
       hole: currentHole,
       defenderName: defender.name,
@@ -279,14 +218,11 @@ const App: React.FC = () => {
       maxDamage: maxHealth,
     };
 
-    // Apply to state
     setPlayers((prev) => {
-      const next = prev.map((p, idx) => {
+      const updated = prev.map((p, idx) => {
         if (idx !== defenderIndex) return p;
 
-        // siege mode: allow repairs after destruction; elimination: mark eliminated at 0
-        const eliminatedNow =
-          mode === "elimination" ? (p.eliminated || newHealth === 0) : p.eliminated;
+        const eliminatedNow = mode === "elimination" ? (p.eliminated || newHealth === 0) : p.eliminated;
 
         return {
           ...p,
@@ -296,37 +232,64 @@ const App: React.FC = () => {
         };
       });
 
-      // In elimination mode, if defender got eliminated, ensure they won't be selected again
-      return next;
+      // set next defender based on updated players (so skip eliminated immediately)
+      const nextDef = getNextDefenderIndex(defenderIndex, updated);
+      setDefenderIndex(nextDef);
+
+      return updated;
     });
 
     setLastSummary(summary);
     setHistory((prev) => [...prev, summary]);
 
-    // Advance
     setHoleInputs({});
     setCurrentHole((h) => h + 1);
-
-    // Compute next defender index using *current* players snapshot updated via setPlayers async:
-    // We'll compute next based on current players but the elimination skip works even if
-    // the eliminated flag updates right after (worst case: one extra click will self-correct).
-    setDefenderIndex((idx) => nextDefenderIndex(idx, players));
   };
 
-  const winnerInfo = useMemo(() => computeWinner(players), [players, mode]);
+  const winnerInfo = useMemo(() => {
+    const pool =
+      mode === "elimination"
+        ? players.filter((p) => !p.eliminated)
+        : players;
+
+    if (pool.length === 0) return null;
+
+    const sortedPlayers = [...pool].sort((a, b) => {
+      if (b.fortLayers !== a.fortLayers) return b.fortLayers - a.fortLayers;
+      if (a.fortsDestroyed !== b.fortsDestroyed) return a.fortsDestroyed - b.fortsDestroyed;
+      return a.name.localeCompare(b.name);
+    });
+
+    const best = sortedPlayers[0];
+    const ties = sortedPlayers.filter(
+      (p) =>
+        p.fortLayers === best.fortLayers &&
+        p.fortsDestroyed === best.fortsDestroyed
+    );
+
+    return { sortedPlayers, best, ties };
+  }, [players, mode]);
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 p-6 flex justify-center">
       <div className="w-full max-w-6xl space-y-6 pb-12">
-        {/* Header */}
+        {/* Header with logo */}
         <header className="space-y-3">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div>
-              <h1 className="text-3xl font-bold">Fort Golf Control Panel</h1>
-              <p className="text-slate-400 text-sm">
-                Two modes: Option B (Elimination) or Option E (Siege). Damage + repairs each hole.
-              </p>
+            <div className="flex items-center gap-4">
+              <img
+                src="/fort-golf-logo.png"
+                alt="Fort Golf logo"
+                className="h-14 w-auto"
+              />
+              <div>
+                <h1 className="text-3xl font-bold leading-tight">Fort Golf</h1>
+                <p className="text-slate-400 text-sm">
+                  Tactical fort battle scoring for golf
+                </p>
+              </div>
             </div>
+
             <button
               onClick={resetGame}
               className="px-4 py-2 rounded-lg bg-slate-100 text-slate-900 font-semibold hover:bg-white transition"
@@ -350,7 +313,8 @@ const App: React.FC = () => {
                 <option value="siege">Option E — Siege (Forts Destroyed tally)</option>
               </select>
               <p className="text-[11px] text-slate-500">
-                Switching modes doesn’t auto-reset—hit <span className="font-semibold">Reset Game</span>.
+                Switching modes doesn’t auto-reset — hit{" "}
+                <span className="font-semibold">Reset Game</span>.
               </p>
             </div>
 
@@ -385,7 +349,8 @@ const App: React.FC = () => {
                 ))}
               </select>
               <p className="text-[11px] text-slate-500">
-                Change this, then hit <span className="font-semibold">Reset Game</span> to apply.
+                Change this, then hit{" "}
+                <span className="font-semibold">Reset Game</span> to apply.
               </p>
             </div>
 
@@ -439,7 +404,9 @@ const App: React.FC = () => {
               <div className="text-sm text-slate-300">
                 Mode:{" "}
                 <span className="font-semibold">
-                  {mode === "elimination" ? "Option B — Elimination" : "Option E — Siege"}
+                  {mode === "elimination"
+                    ? "Option B — Elimination"
+                    : "Option E — Siege"}
                 </span>
               </div>
             </div>
@@ -452,15 +419,16 @@ const App: React.FC = () => {
                 </span>
               </div>
               <div className="text-slate-400 text-xs mt-1">
-                Winner is based on most health remaining; tiebreaker is fewer forts destroyed.
+                Winner = most health remaining; tiebreaker = fewer forts destroyed.
               </div>
             </div>
 
             <div className="mt-4 grid md:grid-cols-2 gap-3">
-              {winnerInfo.sorted.map((p) => {
+              {winnerInfo.sortedPlayers.map((p) => {
                 const damage = p.maxLayers - p.fortLayers;
                 const status =
                   mode === "elimination" && p.eliminated ? "ELIMINATED" : "ACTIVE";
+
                 return (
                   <div
                     key={p.id}
@@ -473,11 +441,15 @@ const App: React.FC = () => {
                     <div className="mt-2 grid grid-cols-3 gap-2 text-xs text-slate-300">
                       <div>
                         <div className="text-[11px] uppercase text-slate-500">Damage</div>
-                        <div className="font-mono">{damage} / {p.maxLayers}</div>
+                        <div className="font-mono">
+                          {damage} / {p.maxLayers}
+                        </div>
                       </div>
                       <div>
                         <div className="text-[11px] uppercase text-slate-500">Health</div>
-                        <div className="font-mono">{p.fortLayers} / {p.maxLayers}</div>
+                        <div className="font-mono">
+                          {p.fortLayers} / {p.maxLayers}
+                        </div>
                       </div>
                       <div>
                         <div className="text-[11px] uppercase text-slate-500">Destroyed</div>
@@ -508,7 +480,8 @@ const App: React.FC = () => {
               </p>
             </div>
             <div className="text-sm text-slate-300">
-              Active players: <span className="font-semibold">{activePlayers.length}</span>
+              Active players:{" "}
+              <span className="font-semibold">{activePlayersCount}</span>
             </div>
           </section>
         )}
@@ -571,8 +544,13 @@ const App: React.FC = () => {
                   </div>
 
                   <div className="mt-2 text-[11px] text-slate-300 flex justify-between">
-                    <span>Health: <span className="font-mono">{health}</span></span>
-                    <span>Destroyed: <span className="font-mono">{player.fortsDestroyed}</span></span>
+                    <span>
+                      Health: <span className="font-mono">{health}</span>
+                    </span>
+                    <span>
+                      Destroyed:{" "}
+                      <span className="font-mono">{player.fortsDestroyed}</span>
+                    </span>
                   </div>
                 </div>
               </div>
@@ -619,9 +597,7 @@ const App: React.FC = () => {
                       key={player.id}
                       className="rounded-lg border border-slate-700 p-4 bg-slate-900/60 space-y-3"
                     >
-                      <h3 className="text-sm font-semibold">
-                        Attacker: {player.name}
-                      </h3>
+                      <h3 className="text-sm font-semibold">Attacker: {player.name}</h3>
 
                       <label className="flex items-center gap-2 text-xs">
                         <input
@@ -691,11 +667,15 @@ const App: React.FC = () => {
                 <div className="grid sm:grid-cols-4 gap-3 mt-3">
                   <div>
                     <p className="text-[11px] uppercase text-slate-400">Attacker Damage</p>
-                    <p className="font-mono text-slate-100">{lastSummary.attackerDamageTotal}</p>
+                    <p className="font-mono text-slate-100">
+                      {lastSummary.attackerDamageTotal}
+                    </p>
                   </div>
                   <div>
                     <p className="text-[11px] uppercase text-slate-400">Defender Repair</p>
-                    <p className="font-mono text-emerald-300">+{lastSummary.defenderRepair}</p>
+                    <p className="font-mono text-emerald-300">
+                      +{lastSummary.defenderRepair}
+                    </p>
                   </div>
                   <div>
                     <p className="text-[11px] uppercase text-slate-400">Net Change</p>
@@ -709,7 +689,7 @@ const App: React.FC = () => {
                           : "text-slate-200")
                       }
                     >
-                      {formatSigned(lastSummary.netChange)}
+                      {signed(lastSummary.netChange)}
                     </p>
                   </div>
                   <div>
@@ -733,24 +713,29 @@ const App: React.FC = () => {
                 <p className="text-slate-400 text-xs">No holes played yet.</p>
               ) : (
                 <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
-                  {history.map((entry) => (
+                  {history.map((entry, idx) => (
                     <div
-                      key={`${entry.hole}-${entry.defenderName}`}
+                      key={`${entry.hole}-${entry.defenderName}-${idx}`}
                       className="border border-slate-700/60 rounded-lg px-3 py-2 bg-slate-900/60"
                     >
                       <div className="flex justify-between text-xs">
                         <span className="font-semibold">Hole {entry.hole}</span>
                         <span className="text-slate-300">
-                          Defender: <span className="font-semibold">{entry.defenderName}</span>
+                          Defender:{" "}
+                          <span className="font-semibold">{entry.defenderName}</span>
                         </span>
                       </div>
 
                       <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-slate-300">
                         <span>
-                          Attacker: <span className="font-mono">{entry.attackerDamageTotal}</span>
+                          Attacker:{" "}
+                          <span className="font-mono">{entry.attackerDamageTotal}</span>
                         </span>
                         <span>
-                          Repair: <span className="font-mono text-emerald-300">+{entry.defenderRepair}</span>
+                          Repair:{" "}
+                          <span className="font-mono text-emerald-300">
+                            +{entry.defenderRepair}
+                          </span>
                         </span>
                         <span>
                           Net:{" "}
@@ -764,11 +749,14 @@ const App: React.FC = () => {
                                 : "text-slate-200")
                             }
                           >
-                            {formatSigned(entry.netChange)}
+                            {signed(entry.netChange)}
                           </span>
                         </span>
                         <span>
-                          Damage: <span className="font-mono">{entry.finalDamage} / {entry.maxDamage}</span>
+                          Damage:{" "}
+                          <span className="font-mono">
+                            {entry.finalDamage} / {entry.maxDamage}
+                          </span>
                         </span>
                       </div>
                     </div>
